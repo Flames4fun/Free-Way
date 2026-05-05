@@ -503,7 +503,46 @@ function renderTestModelOptions() {
     .join('');
 }
 
+function toUsageNumber(value) {
+  const number = Number(value ?? 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function getUsageTotals(records) {
+  return (Array.isArray(records) ? records : []).reduce((totals, record) => {
+    const promptTokens = toUsageNumber(record.promptTokens);
+    const completionTokens = toUsageNumber(record.completionTokens);
+
+    totals.callCount += toUsageNumber(record.callCount);
+    totals.promptTokens += promptTokens;
+    totals.completionTokens += completionTokens;
+    totals.totalTokens += toUsageNumber(record.totalTokens ?? promptTokens + completionTokens);
+
+    return totals;
+  }, {
+    callCount: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+  });
+}
+
+function setTextContent(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.textContent = value;
+}
+
+function renderUsageSummary() {
+  const totals = getUsageTotals(state.usageRecords);
+
+  setTextContent('usage-total-calls', formatNumber(totals.callCount));
+  setTextContent('usage-total-prompt-tokens', formatNumber(totals.promptTokens));
+  setTextContent('usage-total-completion-tokens', formatNumber(totals.completionTokens));
+  setTextContent('usage-total-tokens', formatNumber(totals.totalTokens));
+}
+
 function renderUsage() {
+  renderUsageSummary();
   const tbody = document.getElementById('usage-table-body');
   const records = state.usageRecords;
   if (!records || records.length === 0) {
