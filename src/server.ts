@@ -91,6 +91,19 @@ async function readBody(req: http.IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf-8');
 }
 
+type JsonBodyParseResult<T> =
+  | { ok: true; value: T }
+  | { ok: false };
+
+function parseJsonBody<T>(raw: string, res: http.ServerResponse): JsonBodyParseResult<T> {
+  try {
+    return { ok: true, value: JSON.parse(raw) as T };
+  } catch {
+    sendJSON(res, 400, { error: { message: 'Invalid JSON body', type: 'invalid_request_error' } });
+    return { ok: false };
+  }
+}
+
 async function serveStatic(url: string, res: http.ServerResponse): Promise<boolean> {
   if (url === '/' || url === '/index.html') {
     const html = await readFile(path.join(WEB_ROOT, 'templates', 'index.html'), 'utf-8');
@@ -221,7 +234,9 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/config/keys' && req.method === 'POST') {
       const raw = await readBody(req);
-      const payload = JSON.parse(raw) as { keys?: Record<string, string>; gatewayKey?: string };
+      const parsedBody = parseJsonBody<{ keys?: Record<string, string>; gatewayKey?: string }>(raw, res);
+      if (!parsedBody.ok) return;
+      const payload = parsedBody.value;
       const keys = payload.keys ?? {};
       const updated: string[] = [];
       const ignored: string[] = [];
@@ -270,7 +285,9 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/v1/chat/completions' && req.method === 'POST') {
       if (!checkGatewayAuth(req, res)) return;
       const raw = await readBody(req);
-      const request = JSON.parse(raw) as ChatCompletionRequest;
+      const parsedBody = parseJsonBody<ChatCompletionRequest>(raw, res);
+      if (!parsedBody.ok) return;
+      const request = parsedBody.value;
 
       trace('openai.request', {
         model: request.model ?? null,
@@ -387,7 +404,9 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/v1/messages/count_tokens' && req.method === 'POST') {
       if (!checkGatewayAuth(req, res)) return;
       const raw = await readBody(req);
-      const payload = JSON.parse(raw) as Record<string, unknown>;
+      const parsedBody = parseJsonBody<Record<string, unknown>>(raw, res);
+      if (!parsedBody.ok) return;
+      const payload = parsedBody.value;
       const result = estimateAnthropicCountTokens({
         messages: payload.messages,
         system: payload.system,
@@ -400,7 +419,9 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/v1/messages' && req.method === 'POST') {
       if (!checkGatewayAuth(req, res)) return;
       const raw = await readBody(req);
-      const anthropicReq = JSON.parse(raw) as AnthropicRequest;
+      const parsedBody = parseJsonBody<AnthropicRequest>(raw, res);
+      if (!parsedBody.ok) return;
+      const anthropicReq = parsedBody.value;
 
       trace('anthropic.request', {
         model: anthropicReq.model ?? null,
